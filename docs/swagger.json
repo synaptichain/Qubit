@@ -1,0 +1,245 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "version": "1.0.0",
+    "title": "Blockchain API",
+    "description": "API REST para manejar una blockchain y realizar transacciones de tokens."
+  },
+  "host": "localhost:8080",
+  "schemes": ["http"],
+  "paths": {
+    "/blocks": {
+      "get": {
+        "summary": "Obtener todos los bloques",
+        "description": "Devuelve la lista de bloques almacenados en la blockchain.",
+        "responses": {
+          "200": {
+            "description": "Lista de bloques",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Block"
+              }
+            }
+          },
+          "500": {
+            "description": "Error al cargar los bloques"
+          }
+        }
+      }
+    },
+    "/balance": {
+      "get": {
+        "summary": "Obtener el saldo de una cuenta",
+        "description": "Devuelve el saldo de una cuenta específica.",
+        "parameters": [
+          {
+            "name": "account",
+            "in": "query",
+            "required": true,
+            "type": "string",
+            "description": "El identificador de la cuenta"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Saldo de la cuenta",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "account": {
+                  "type": "string",
+                  "example": "cuenta1"
+                },
+                "balance": {
+                  "type": "integer",
+                  "example": 75000000
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La cuenta no existe"
+          }
+        }
+      }
+    },
+    "/transactions": {
+      "get": {
+        "summary": "Obtener todas las transacciones",
+        "description": "Devuelve la lista de todas las transacciones registradas.",
+        "responses": {
+          "200": {
+            "description": "Lista de transacciones",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Transaction"
+              }
+            }
+          },
+          "500": {
+            "description": "Error al cargar las transacciones"
+          }
+        }
+      },
+      "post": {
+        "summary": "Registrar una transacción",
+        "description": "Permite transferir tokens entre cuentas.",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/Transaction"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Transacción registrada exitosamente",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "message": {
+                  "type": "string",
+                  "example": "Transacción registrada exitosamente"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error en la transferencia"
+          }
+        }
+      }
+    },
+    "/generate-address": {
+      "get": {
+        "summary": "Genera una nueva dirección y devuelve la clave privada asociada",
+        "description": "Genera una nueva dirección y la clave privada asociada en formato hexadecimal.",
+        "responses": {
+          "200": {
+            "description": "Dirección y clave privada generadas exitosamente",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "address": {
+                  "type": "string",
+                  "description": "La dirección generada"
+                },
+                "privateKey": {
+                  "type": "string",
+                  "description": "La clave privada asociada"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error generando la dirección"
+          }
+        }
+      }
+    },
+    "/transfer": {
+      "post": {
+        "summary": "Transferir tokens entre cuentas",
+        "description": "Permite realizar una transferencia de tokens entre dos cuentas.",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/Transfer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Transferencia realizada exitosamente",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "message": {
+                  "type": "string",
+                  "example": "Transferencia realizada exitosamente"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error en la transferencia"
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "Block": {
+      "type": "object",
+      "properties": {
+        "index": {
+          "type": "integer",
+          "example": 1
+        },
+        "timestamp": {
+          "type": "string",
+          "example": "2023-12-01T12:34:56Z"
+        },
+        "data": {
+          "type": "string",
+          "example": "Bloque de datos"
+        },
+        "hash": {
+          "type": "string",
+          "example": "abc123"
+        },
+        "prev_hash": {
+          "type": "string",
+          "example": "def456"
+        }
+      }
+    },
+    "Transaction": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": "string",
+          "example": "cuenta1"
+        },
+        "to": {
+          "type": "string",
+          "example": "cuenta2"
+        },
+        "amount": {
+          "type": "integer",
+          "example": 500
+        }
+      }
+    },
+    "Transfer": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": "string",
+          "example": "cuenta1"
+        },
+        "to": {
+          "type": "string",
+          "example": "cuenta2"
+        },
+        "amount": {
+          "type": "integer",
+          "example": 500
+        }
+      }
+    }
+  }
+}
+
+
+
+
+  
