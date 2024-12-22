@@ -5,7 +5,8 @@ go 1.22.2
 require (
 	github.com/dop251/goja v0.0.0-20241024094426-79f3a7efcdbd
 	github.com/gorilla/mux v1.8.1
-	github.com/mattn/go-sqlite3 v1.14.24
+	github.com/lib/pq v1.10.9
+	github.com/wasmerio/wasmer-go v1.0.4
 	golang.org/x/crypto v0.29.0
 )
 

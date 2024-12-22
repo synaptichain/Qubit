@@ -1,0 +1,11 @@
+# Git Ignore
+/vendor/
+/node_modules/
+target/
+*.exe
+*.dll
+*.so
+*.dylib
+*.wasm
+*.log
+.env

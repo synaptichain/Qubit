@@ -22,20 +22,18 @@
               }
             }
           },
-          "500": {
-            "description": "Error al cargar los bloques"
-          }
+          "500": { "description": "Error al cargar los bloques" }
         }
       }
     },
-    "/balance": {
+    "/balances/{account}": {
       "get": {
         "summary": "Obtener el saldo de una cuenta",
         "description": "Devuelve el saldo de una cuenta específica.",
         "parameters": [
           {
             "name": "account",
-            "in": "query",
+            "in": "path",
             "required": true,
             "type": "string",
             "description": "El identificador de la cuenta"
@@ -47,20 +45,12 @@
             "schema": {
               "type": "object",
               "properties": {
-                "account": {
-                  "type": "string",
-                  "example": "cuenta1"
-                },
-                "balance": {
-                  "type": "integer",
-                  "example": 75000000
-                }
+                "account": { "type": "string" },
+                "balance": { "type": "integer" }
               }
             }
           },
-          "404": {
-            "description": "La cuenta no existe"
-          }
+          "404": { "description": "La cuenta no existe" }
         }
       }
     },
@@ -73,14 +63,10 @@
             "description": "Lista de transacciones",
             "schema": {
               "type": "array",
-              "items": {
-                "$ref": "#/definitions/Transaction"
-              }
+              "items": { "$ref": "#/definitions/Transaction" }
             }
           },
-          "500": {
-            "description": "Error al cargar las transacciones"
-          }
+          "500": { "description": "Error al cargar las transacciones" }
         }
       },
       "post": {
@@ -91,87 +77,58 @@
             "name": "body",
             "in": "body",
             "required": true,
-            "schema": {
-              "$ref": "#/definitions/Transaction"
-            }
+            "schema": { "$ref": "#/definitions/Transaction" }
           }
         ],
         "responses": {
-          "200": {
-            "description": "Transacción registrada exitosamente",
-            "schema": {
-              "type": "object",
-              "properties": {
-                "message": {
-                  "type": "string",
-                  "example": "Transacción registrada exitosamente"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Error en la transferencia"
-          }
+          "200": { "description": "Transacción registrada exitosamente" },
+          "400": { "description": "Error en la transferencia" }
         }
       }
     },
     "/generate-address": {
       "get": {
-        "summary": "Genera una nueva dirección y devuelve la clave privada asociada",
-        "description": "Genera una nueva dirección y la clave privada asociada en formato hexadecimal.",
+        "summary": "Generar una nueva dirección",
+        "description": "Genera una nueva dirección con clave privada asociada.",
         "responses": {
           "200": {
-            "description": "Dirección y clave privada generadas exitosamente",
+            "description": "Dirección generada exitosamente",
             "schema": {
               "type": "object",
               "properties": {
-                "address": {
-                  "type": "string",
-                  "description": "La dirección generada"
-                },
-                "privateKey": {
-                  "type": "string",
-                  "description": "La clave privada asociada"
-                }
+                "address": { "type": "string" },
+                "privateKey": { "type": "string" }
               }
             }
           },
-          "500": {
-            "description": "Error generando la dirección"
-          }
+          "500": { "description": "Error generando la dirección" }
         }
       }
     },
-    "/transfer": {
+    "/wasm-contracts": {
       "post": {
-        "summary": "Transferir tokens entre cuentas",
-        "description": "Permite realizar una transferencia de tokens entre dos cuentas.",
+        "summary": "Registrar un contrato WASM",
+        "description": "Permite registrar un contrato WASM en la blockchain.",
         "parameters": [
           {
             "name": "body",
             "in": "body",
             "required": true,
             "schema": {
-              "$ref": "#/definitions/Transfer"
+              "type": "object",
+              "properties": {
+                "id": { "type": "string", "description": "Identificador único del contrato" },
+                "owner": { "type": "string", "description": "Propietario del contrato" },
+                "wasm_code": { "type": "string", "description": "Código del contrato en base64" }
+              },
+              "required": ["id", "owner", "wasm_code"]
             }
           }
         ],
         "responses": {
-          "200": {
-            "description": "Transferencia realizada exitosamente",
-            "schema": {
-              "type": "object",
-              "properties": {
-                "message": {
-                  "type": "string",
-                  "example": "Transferencia realizada exitosamente"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Error en la transferencia"
-          }
+          "200": { "description": "Contrato WASM registrado exitosamente" },
+          "400": { "description": "Solicitud inválida" },
+          "500": { "description": "Error al guardar el contrato WASM" }
         }
       }
     }
@@ -180,66 +137,23 @@
     "Block": {
       "type": "object",
       "properties": {
-        "index": {
-          "type": "integer",
-          "example": 1
+        "Index": { "type": "integer" },
+        "Timestamp": { "type": "string" },
+        "Transactions": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Transaction" }
         },
-        "timestamp": {
-          "type": "string",
-          "example": "2023-12-01T12:34:56Z"
-        },
-        "data": {
-          "type": "string",
-          "example": "Bloque de datos"
-        },
-        "hash": {
-          "type": "string",
-          "example": "abc123"
-        },
-        "prev_hash": {
-          "type": "string",
-          "example": "def456"
-        }
+        "Hash": { "type": "string" },
+        "PrevHash": { "type": "string" }
       }
     },
     "Transaction": {
       "type": "object",
       "properties": {
-        "from": {
-          "type": "string",
-          "example": "cuenta1"
-        },
-        "to": {
-          "type": "string",
-          "example": "cuenta2"
-        },
-        "amount": {
-          "type": "integer",
-          "example": 500
-        }
-      }
-    },
-    "Transfer": {
-      "type": "object",
-      "properties": {
-        "from": {
-          "type": "string",
-          "example": "cuenta1"
-        },
-        "to": {
-          "type": "string",
-          "example": "cuenta2"
-        },
-        "amount": {
-          "type": "integer",
-          "example": 500
-        }
+        "From": { "type": "string" },
+        "To": { "type": "string" },
+        "Amount": { "type": "integer" }
       }
     }
   }
 }
-
-
-
-
-  

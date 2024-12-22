@@ -11,7 +11,7 @@ import (
 )
 
 // GetAddress genera una dirección única, devuelve la clave privada asociada y asigna saldo inicial.
-func GetAddress(db *Database) (string, *ecdsa.PrivateKey, error) {
+func GetAddress(db *Database, initialBalance int64) (string, *ecdsa.PrivateKey, error) {
 	// Generar una clave privada
 	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -22,23 +22,23 @@ func GetAddress(db *Database) (string, *ecdsa.PrivateKey, error) {
 	pubKey := append(privateKey.PublicKey.X.Bytes(), privateKey.PublicKey.Y.Bytes()...)
 	address := blake2b.Sum256(pubKey)
 
-	// Asignar saldo inicial a la nueva cuenta (1000 tokens)
+	// Convertir la dirección a formato hexadecimal
 	accountAddress := hex.EncodeToString(address[:])
 
 	// Verificar si la cuenta ya existe, si no, guardar el saldo
 	exists, err := db.AccountExists(accountAddress)
 	if err != nil {
-		return "", nil, err
+		return "", nil, fmt.Errorf("error verificando si la cuenta existe: %w", err)
 	}
 
 	if !exists {
-		fmt.Println("Guardando saldo para la nueva dirección:", accountAddress)
-		err = db.SaveBalance(accountAddress, 1000)
+		fmt.Printf("Guardando saldo inicial de %d para la nueva dirección: %s\n", initialBalance, accountAddress)
+		err = db.SaveBalance(accountAddress, initialBalance)
 		if err != nil {
-			return "", nil, err
+			return "", nil, fmt.Errorf("error guardando el saldo inicial: %w", err)
 		}
 	}
 
-	// Devolver la dirección como hexadecimal y la clave privada
+	// Devolver la dirección y la clave privada
 	return accountAddress, privateKey, nil
 }

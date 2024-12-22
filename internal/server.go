@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
-	"strconv"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -27,47 +25,103 @@ func NewServer(db *Database, bc *Blockchain, ts *TokenSupply) *Server {
 	}
 }
 
-// Start inicia el servidor HTTP.
+// Start inicia el servidor HTTP y lanza el proceso de minería.
 func (s *Server) Start(port int) {
 	router := mux.NewRouter()
 
 	// Rutas de la API
 	router.HandleFunc("/blocks", s.GetBlocks).Methods("GET")
-	router.HandleFunc("/balances/{account}", s.GetBalance).Methods("GET") // Ruta para obtener el saldo de una cuenta
+	router.HandleFunc("/balances/{account}", s.GetBalance).Methods("GET")
 	router.HandleFunc("/transactions", s.GetTransactions).Methods("GET")
-	router.HandleFunc("/generate-address", s.GenerateAddress).Methods("GET") // Ruta para generar dirección
+	router.HandleFunc("/generate-address", s.GenerateAddress).Methods("GET")
 	router.HandleFunc("/transactions", s.AddTransaction).Methods("POST")
-	router.HandleFunc("/transactions/validate", s.ValidateTransaction).Methods("POST")
-	router.HandleFunc("/contracts", s.AddContract).Methods("POST")
-	router.HandleFunc("/contracts/{id}/execute", s.ExecuteContract).Methods("POST")
-	router.HandleFunc("/tokens/create", s.CreateToken).Methods("POST") // Nueva ruta para crear tokens
+	router.HandleFunc("/wasm-contracts", s.AddWASMContract).Methods("POST")
+	router.HandleFunc("/execute-wasm", s.ExecuteWASMContract).Methods("POST")
+	router.HandleFunc("/wasm-contracts", s.AddWASMContract).Methods("POST")
 
 	// Servir el archivo swagger.json
 	router.HandleFunc("/swagger.json", func(w http.ResponseWriter, r *http.Request) {
-		currentDir, _ := os.Getwd()
-		http.ServeFile(w, r, currentDir+"/docs/swagger.json")
+		http.ServeFile(w, r, "/home/tuxz/blockchain-go/docs/swagger.json")
 	}).Methods("GET")
 
 	// Servir Swagger UI
-	swaggerUIDir := http.Dir("./swagger-ui")
+	swaggerUIDir := http.Dir("/home/tuxz/blockchain-go/swagger-ui")
 	router.PathPrefix("/swagger/").Handler(http.StripPrefix("/swagger/", http.FileServer(swaggerUIDir)))
 
+	// Lanzar el proceso de minería en un goroutine
+	go s.StartMining()
+
+	// Agregar código de depuración para imprimir las rutas registradas
+	fmt.Println("Rutas registradas:")
+	router.Walk(func(route *mux.Route, router *mux.Router, ancestors []*mux.Route) error {
+		path, err := route.GetPathTemplate()
+		if err != nil {
+			path = "no disponible"
+		}
+		methods, err := route.GetMethods()
+		if err != nil {
+			methods = []string{"no disponible"}
+		}
+		fmt.Printf("Ruta: %s, Métodos: %v\n", path, methods)
+		return nil
+	})
+
 	fmt.Printf("Servidor escuchando en el puerto %d\n", port)
-	http.ListenAndServe(fmt.Sprintf(":%d", port), router)
+	if err := http.ListenAndServe(fmt.Sprintf(":%d", port), router); err != nil {
+		fmt.Printf("Error iniciando el servidor: %s\n", err)
+	}
+
+}
+
+// StartMining procesa transacciones pendientes y genera bloques periódicamente.
+func (s *Server) StartMining() {
+	for {
+		time.Sleep(10 * time.Second) // Intervalo de minería
+		pendingTxs, err := s.DB.GetPendingTransactions()
+		if err != nil {
+			fmt.Printf("Error al obtener transacciones pendientes: %s\n", err)
+			continue
+		}
+		if len(pendingTxs) == 0 {
+			fmt.Println("No hay transacciones pendientes para minar.")
+			continue
+		}
+
+		// Crear un nuevo bloque con las transacciones pendientes
+		newBlock := s.Blockchain.AddBlock(pendingTxs, time.Now().UTC().Format(time.RFC3339))
+		err = s.DB.SaveBlock(*newBlock)
+		if err != nil {
+			fmt.Printf("Error al guardar el bloque: %s\n", err)
+			continue
+		}
+
+		// Actualizar saldos en la base de datos
+		for _, tx := range pendingTxs {
+			err = s.DB.UpdateBalances(tx.From, tx.To, tx.Amount)
+			if err != nil {
+				fmt.Printf("Error al actualizar saldos: %s\n", err)
+			}
+		}
+
+		// Limpiar las transacciones pendientes
+		err = s.DB.ClearPendingTransactions()
+		if err != nil {
+			fmt.Printf("Error al limpiar transacciones pendientes: %s\n", err)
+		}
+
+		fmt.Printf("Bloque minado: #%d con %d transacciones\n", newBlock.Index, len(newBlock.Transactions))
+	}
 }
 
 // GenerateAddress genera una nueva dirección y devuelve la clave privada asociada.
 func (s *Server) GenerateAddress(w http.ResponseWriter, r *http.Request) {
-	address, privKey, err := GetAddress(s.DB) // Pasamos la base de datos aquí
+	address, privKey, err := GetAddress(s.DB, 1000) // Saldo inicial configurable
 	if err != nil {
 		http.Error(w, "Error generando dirección", http.StatusInternalServerError)
 		return
 	}
 
-	// Serializar la clave privada en hexadecimal
 	privKeyHex := hex.EncodeToString(privKey.D.Bytes())
-
-	// Responder con la dirección y la clave privada
 	response := map[string]string{
 		"address":     address,
 		"private_key": privKeyHex,
@@ -84,6 +138,7 @@ func (s *Server) GetBlocks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(blocks)
 }
 
@@ -92,14 +147,12 @@ func (s *Server) GetBalance(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	account := vars["account"]
 
-	// Obtener el balance de la base de datos o de alguna estructura que maneje los saldos
 	balance, err := s.DB.GetBalance(account)
 	if err != nil {
 		http.Error(w, "Error obteniendo el saldo", http.StatusInternalServerError)
 		return
 	}
 
-	// Enviar el balance como respuesta JSON
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"account": account,
@@ -115,6 +168,7 @@ func (s *Server) GetTransactions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(transactions)
 }
 
@@ -131,51 +185,37 @@ func (s *Server) AddTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validar cuentas
-	fromExists, _ := s.DB.AccountExists(payload.From)
-	toExists, _ := s.DB.AccountExists(payload.To)
-
-	if !fromExists {
-		http.Error(w, "La cuenta de origen no existe", http.StatusBadRequest)
-		return
-	}
-	if !toExists {
-		http.Error(w, "La cuenta de destino no existe", http.StatusBadRequest)
+	// Validar que las cuentas existan
+	fromExists, err := s.DB.AccountExists(payload.From)
+	if err != nil || !fromExists {
+		http.Error(w, "La cuenta origen no existe", http.StatusBadRequest)
 		return
 	}
 
-	// Validar saldo suficiente
-	fromBalance, _ := s.DB.GetBalance(payload.From)
-	if fromBalance < payload.Amount {
-		http.Error(w, "Saldo insuficiente en la cuenta de origen", http.StatusBadRequest)
+	toExists, err := s.DB.AccountExists(payload.To)
+	if err != nil || !toExists {
+		http.Error(w, "La cuenta destino no existe", http.StatusBadRequest)
 		return
 	}
 
-	// Registrar la transacción
-	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-	err := s.DB.SaveTransaction(payload.From, payload.To, payload.Amount, timestamp)
+	err = s.DB.AddPendingTransaction(payload.From, payload.To, payload.Amount)
 	if err != nil {
-		http.Error(w, "Error registrando la transacción", http.StatusInternalServerError)
+		http.Error(w, "Error añadiendo transacción pendiente", http.StatusInternalServerError)
 		return
 	}
 
-	// Actualizar balances
-	s.TokenSupply.Transfer(payload.From, payload.To, payload.Amount)
-	s.DB.SaveBalance(payload.From, s.TokenSupply.GetBalance(payload.From))
-	s.DB.SaveBalance(payload.To, s.TokenSupply.GetBalance(payload.To))
-
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{
-		"message": "Transacción registrada exitosamente",
+		"message": "Transacción añadida a la cola",
 	})
 }
 
-// ValidateTransaction valida una transacción sin ejecutarla.
-func (s *Server) ValidateTransaction(w http.ResponseWriter, r *http.Request) {
+// AddWASMContract maneja la solicitud para registrar un nuevo contrato WASM.
+func (s *Server) AddWASMContract(w http.ResponseWriter, r *http.Request) {
 	var payload struct {
-		From   string `json:"from"`
-		To     string `json:"to"`
-		Amount int64  `json:"amount"`
+		ID       string `json:"id"`
+		Owner    string `json:"owner"`
+		WASMCode []byte `json:"wasm_code"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
@@ -183,123 +223,29 @@ func (s *Server) ValidateTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validar cuentas
-	fromExists, _ := s.DB.AccountExists(payload.From)
-	toExists, _ := s.DB.AccountExists(payload.To)
-
-	if !fromExists {
-		http.Error(w, "La cuenta de origen no existe", http.StatusBadRequest)
-		return
-	}
-	if !toExists {
-		http.Error(w, "La cuenta de destino no existe", http.StatusBadRequest)
-		return
+	wasmContract := WASMContract{
+		ID:       payload.ID,
+		Owner:    payload.Owner,
+		WASMCode: payload.WASMCode,
 	}
 
-	// Validar saldo suficiente
-	fromBalance, _ := s.DB.GetBalance(payload.From)
-	if fromBalance < payload.Amount {
-		http.Error(w, "Saldo insuficiente en la cuenta de origen", http.StatusBadRequest)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{
-		"message": "La transacción es válida",
-	})
-}
-
-// AddContract maneja la solicitud para registrar un nuevo contrato.
-func (s *Server) AddContract(w http.ResponseWriter, r *http.Request) {
-	var payload struct {
-		ID     string                 `json:"id"`
-		Owner  string                 `json:"owner"`
-		Code   string                 `json:"code"`
-		Params map[string]interface{} `json:"params"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		http.Error(w, "Solicitud inválida", http.StatusBadRequest)
-		return
-	}
-
-	// Crear el contrato
-	contract := NewContract(payload.ID, payload.Owner, payload.Code, payload.Params)
-
-	// Asociar el contrato al último bloque
-	lastBlock := &s.Blockchain.Blocks[len(s.Blockchain.Blocks)-1]
-	lastBlock.AddContract(*contract)
-
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{
-		"message": "Contrato registrado exitosamente",
-	})
-}
-
-// ExecuteContract maneja la solicitud para ejecutar un contrato.
-func (s *Server) ExecuteContract(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	contractID := vars["id"]
-
-	// Buscar el contrato
-	var contract *Contract
-	for _, block := range s.Blockchain.Blocks {
-		for _, c := range block.Contracts {
-			if c.ID == contractID {
-				contract = &c
-				break
-			}
-		}
-	}
-
-	if contract == nil {
-		http.Error(w, "Contrato no encontrado", http.StatusNotFound)
-		return
-	}
-
-	// Leer la entrada desde la solicitud
-	var input map[string]interface{}
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		http.Error(w, "Entrada inválida para el contrato", http.StatusBadRequest)
-		return
-	}
-
-	// Crear el entorno para ejecutar el contrato
-	env := map[string]interface{}{
-		"transfer": func(from, to string, amount int64) {
-			fmt.Printf("Ejecutando transferencia de %d tokens de %s a %s\n", amount, from, to)
-			if err := s.TokenSupply.Transfer(from, to, amount); err != nil {
-				panic(err)
-			}
-		},
-		"mint": func(to string, amount int64) {
-			fmt.Printf("Acuñando %d tokens para %s\n", amount, to)
-			s.TokenSupply.Mint(to, amount)
-		},
-	}
-
-	// Depurar el código registrado
-	fmt.Println("Código del contrato registrado:", contract.Compiled)
-
-	// Ejecutar el contrato
-	result, err := contract.Execute(input, env)
+	err := s.DB.SaveWASMContract(wasmContract)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Error ejecutando el contrato: %s", err.Error()), http.StatusBadRequest)
+		http.Error(w, "Error guardando contrato WASM", http.StatusInternalServerError)
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{
-		"message": result,
+		"message": "Contrato WASM registrado exitosamente",
 	})
 }
 
-// CreateToken permite crear nuevos tokens.
-func (s *Server) CreateToken(w http.ResponseWriter, r *http.Request) {
+// ExecuteWASMContract maneja la ejecución de un contrato WASM.
+func (s *Server) ExecuteWASMContract(w http.ResponseWriter, r *http.Request) {
 	var payload struct {
-		Name   string `json:"name"`
-		Symbol string `json:"symbol"`
-		Amount int64  `json:"amount"`
+		ID    string `json:"id"`
+		Input []byte `json:"input"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
@@ -307,11 +253,20 @@ func (s *Server) CreateToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Crear tokens
-	s.TokenSupply.Mint(payload.Name, payload.Amount)
+	contract, err := s.DB.LoadWASMContract(payload.ID)
+	if err != nil || contract == nil {
+		http.Error(w, "Contrato WASM no encontrado", http.StatusNotFound)
+		return
+	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{
-		"message": fmt.Sprintf("Se crearon %d tokens para el proyecto %s", payload.Amount, payload.Name),
+	result, err := contract.Execute(payload.Input)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error ejecutando contrato WASM: %s", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"result": result,
 	})
 }
