@@ -1,90 +1,117 @@
-# Blockchain Go
+# Qubit: A Blockchain Implementation
 
-Blockchain Go es una implementación básica de una blockchain utilizando Go. El proyecto permite la creación de bloques, la gestión de cuentas y saldos, transferencias de tokens y la ejecución de contratos inteligentes.
+**Qubit** is a modular blockchain project designed for experimentation and learning, supporting smart contracts and WASM integration. It uses PostgreSQL for persistence and offers a RESTful API for interaction.
 
-## Tecnologías Utilizadas
+## Features
+- **Blockchain Core**: Supports transaction processing, block creation, and mining.
+- **Consensus Mechanism**: Work-in-progress (PoST or Tendermint-based).
+- **Smart Contracts**:
+  - **WASM Integration**: Upload and execute WebAssembly contracts.
+  - **Secure Execution**: Contract isolation using Wasmer.
+- **Persistence**: Data storage using PostgreSQL.
+- **RESTful API**:
+  - Manage accounts, balances, and transactions.
+  - Upload and query smart contracts.
+  - Access blockchain statistics.
+- **Swagger Documentation**: Comprehensive API documentation.
 
-- **Lenguaje**: Go
-- **Base de Datos**: SQLite (para almacenar bloques, saldos y transacciones)
-- **Bibliotecas**:
-  - `goja`: Para ejecutar contratos inteligentes en JavaScript.
-  - `github.com/rs/cors`: Para habilitar CORS y permitir acceso desde diferentes dominios.
-  - `swagger-ui`: Para la documentación interactiva de la API.
+## Project Structure
+```
+├── internal
+│   ├── blockchain.go       # Blockchain core functionality
+│   ├── block.go            # Block structure and utilities
+│   ├── wasm_executor.go    # WASM contract execution
+│   ├── db.go               # PostgreSQL database integration
+│   ├── server.go           # HTTP server and API handlers
+├── wasm_lib
+│   ├── src
+│   │   ├── lib.rs          # Rust library for WASM smart contracts
+│   └── Cargo.toml          # Rust project configuration
+├── docs
+│   └── swagger.json        # Swagger API documentation
+├── README.md               # Project documentation
+└── main.go                 # Application entry point
+```
 
-## Funcionalidades
+## Setup
 
-### API REST
+### Prerequisites
+- **Go** (1.20+)
+- **Rust** (with `wasm32-unknown-unknown` target)
+- **PostgreSQL**
 
-La API REST permite interactuar con la blockchain a través de las siguientes rutas:
-
-- **GET `/generate-address`**: Genera una nueva dirección y devuelve la clave privada asociada.
-- **GET `/all-accounts`**: Obtiene todas las cuentas almacenadas en la base de datos junto con sus balances.
-- **GET `/blocks`**: Obtiene todos los bloques almacenados en la blockchain.
-- **GET `/balance?account={address}`**: Obtiene el saldo de una cuenta específica.
-- **POST `/transfer`**: Realiza una transferencia de tokens entre dos cuentas.
-- **POST `/contracts`**: Registra un contrato inteligente en la blockchain.
-- **POST `/contracts/{id}/execute`**: Ejecuta un contrato inteligente dado su ID.
-
-### Ejemplo de Uso
-
-1. **Generar una nueva dirección**:
+### Installation
+1. **Clone the repository**:
    ```bash
-   curl -X GET http://localhost:8080/generate-address
+   git clone https://github.com/synaptichain/Qubit.git
+   cd Qubit
+   ```
 
+2. **Set up PostgreSQL**:
+   - Create a database:
+     ```sql
+     CREATE DATABASE blockchain_db;
+     ```
+   - Update the connection string in `internal/db.go`:
+     ```go
+     "postgres://<username>:<password>@localhost:5432/blockchain_db"
+     ```
 
-2. **Consultar el saldo de una cuenta**:
+3. **Compile the WASM library**:
+   ```bash
+   cd wasm_lib
+   cargo build --release --target wasm32-unknown-unknown
+   ```
 
+4. **Run the application**:
+   ```bash
+   go run main.go
+   ```
 
-curl -X GET "http://localhost:8080/balance?account=cuenta1"
+## API Endpoints
+- **GET** `/blocks` - Retrieve all blocks.
+- **GET** `/balances/{account}` - Retrieve account balance.
+- **POST** `/transactions` - Add a new transaction.
+- **GET** `/generate-address` - Generate a new address.
+- **POST** `/wasm-contracts` - Upload a WASM smart contract.
 
-3. **Realizar una transferencia**:
+## Smart Contracts
+Contracts are written in Rust and compiled to WASM. Use the `serde-wasm-bindgen` library for data serialization.
 
-curl -X POST http://localhost:8080/transfer -d '{"from": "cuenta1", "to": "cuenta2", "amount": 500}'
+Example WASM smart contract:
+```rust
+use serde::{Deserialize, Serialize};
+use wasm_bindgen::prelude::*;
 
-Swagger UI
-Documentación interactiva: La API está documentada usando Swagger UI.
-Acceso: Una vez el servidor esté en funcionamiento, la documentación de la API puede ser accedida desde http://localhost:8080/swagger-ui/.
-Instalación
-Requisitos
-Go (v1.18 o superior)
-SQLite (automáticamente gestionado por el proyecto)
-Pasos de Instalación
+#[wasm_bindgen]
+pub fn execute(input: JsValue) -> JsValue {
+    let input_data: InputData = serde_wasm_bindgen::from_value(input).unwrap();
+    let output_data = OutputData {
+        result: input_data.value * 2,
+    };
+    serde_wasm_bindgen::to_value(&output_data).unwrap()
+}
 
+#[derive(Serialize, Deserialize)]
+struct InputData {
+    value: i32,
+}
 
-1. **Clonar el repositorio**:
-git clone https://github.com/tu_usuario/blockchain-go.git
-cd blockchain-go
+#[derive(Serialize, Deserialize)]
+struct OutputData {
+    result: i32,
+}
+```
 
-2. **Instalar dependencias**: Si no tienes Go Modules activado, asegúrate de inicializarlo:
+## Roadmap
+- Implement Tendermint for consensus.
+- Create a GUI-based contract management tool.
+- Enhance performance with indexing and caching.
 
-go mod init
-go mod tidy
+## Contributing
+Feel free to fork the repository, open issues, or submit pull requests.
 
-3. **Ejecutar el servidor**:
-
-go run main.go
-
-4. **Acceder a la API**:
- 
- El servidor escuchará en http://localhost:8080. Puedes usar la interfaz de Swagger en http://localhost:8080/swagger-ui/ para interactuar con la API.
-
-Contribuciones
-Las contribuciones son bienvenidas. Si tienes alguna idea o mejora, por favor abre un Issue o envía un Pull Request.
-
-
-License
-Este proyecto está licenciado bajo la MIT License - ver el archivo LICENSE para más detalles.
-
-
-### Qué incluye este README:
-- **Descripción del proyecto**: Qué es lo que hace tu proyecto.
-- **Tecnologías utilizadas**: Herramientas y bibliotecas empleadas.
-- **Funcionamiento de la API**: Las rutas principales de la API y ejemplos de uso.
-- **Instalación**: Instrucciones sobre cómo poner en marcha el proyecto localmente.
-- **Contribuciones**: Cómo otros pueden contribuir a tu proyecto.
-- **Licencia**: La licencia bajo la cual se distribuye el código (en este caso, MIT).
-
-Si necesitas agregar más detalles o modificar algo, avísame y lo ajustamos.
-
+## License
+[MIT License](LICENSE)
 
  
